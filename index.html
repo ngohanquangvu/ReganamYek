@@ -57,6 +57,10 @@ def get_current_user(api_key: str = Depends(api_key_header)):
     else:
         raise HTTPException(status_code=403, detail="Permission denied")
 
+@app.get("/")
+def status():
+    return {"status":"ok"}
+
 @app.get("/key_manager")
 def get_key_manager(current_user: dict = Depends(get_current_user)):
     return current_user["data"]
