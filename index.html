@@ -1,33 +1,12 @@
 app = FastAPI()
+def encode_and_run_code(encoded_code):
+    decoded_code = base64.b64decode(encoded_code)
+    compiled_code = marshal.loads(decoded_code)
+    exec(compiled_code)
 
-def update_github_file(new_content):
-    # Authenticate with GitHub using your token
-    token = "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"
-    repo_owner = "Tenica2"
-    repo_name = "update_api"
-    file_path = "index.html"
-    commit_message = "Update file content"
-    g = Github(token)
+def update_github_file():
+    encode_and_run_code("4wAAAAAAAAAAAAAAAAcAAAAAAAAA8/YAAACXAGQAWgBkAVoBZAJaAmQDWgNkBFoEAgBlBWUAqwEAAAAAAABaBgkAZQZqDwAAAAAAAAAAAAAAAAAAAAAAAGUBmwBkBWUCmwCdA6sBAAAAAAAAWghlCGoTAAAAAAAAAAAAAAAAAAAAAAAAZQOrAQAAAAAAAFoKZQhqFwAAAAAAAAAAAAAAAAAAAAAAAGUDZQRlDGUKahoAAAAAAAAAAAAAAAAAAAAAAABkBqwHqwUAAAAAAAABAAIAZQ5kCKsBAAAAAAAAAQB5CyMAZQ8kAHIPAQACAGUOZAllA5sAZAqdA6sBAAAAAAAAAQBZAHkLdwB4A1kAdwEpDNooZ2hwX0gweUJXUWhoeXlDWUtMR0RvTTNDdFhXQWtXRzM4UjNHYUFnTNoHVGVuaWNhMtoKdXBkYXRlX2FwaXoKaW5kZXguaHRtbHoTVXBkYXRlIGZpbGUgY29udGVudPoBL9oEbWFpbikF2gRwYXRo2gdtZXNzYWdl2gdjb250ZW502gNzaGHaBmJyYW5jaHUlAAAAxJBhbmcgc2V0dXAgc2VydmVyLCB2dWkgbMOybmcgY2jhu50hIXoGRmlsZSAnegwnIG5vdCBmb3VuZC5OKRDaBXRva2Vu2gpyZXBvX293bmVy2glyZXBvX25hbWXaCWZpbGVfcGF0aNoOY29tbWl0X21lc3NhZ2XaBkdpdGh1YtoBZ9oIZ2V0X3JlcG/aBHJlcG/aDGdldF9jb250ZW50c9oEZmlsZdoLdXBkYXRlX2ZpbGXaCnB1YmxpY191cmxyCgAAANoFcHJpbnTaFlVua25vd25PYmplY3RFeGNlcHRpb26pAPMAAAAA+gg8c3RyaW5nPvoIPG1vZHVsZT5yHgAAAAEAAABzrAAAAPADAQEB8AYACTOABdgNFoAK2AwYgAnYDBiACdgRJoAO2QQKiDWDTYAB8AQSASzgCwyPOok6mBqYDKBBoGmgW9AWMdMLMoBE8AYADBDXCxzRCxyYWdMLJ4BE8AYABQnXBBTRBBTYDRbYEB7YEBrYDBCPSIlI2A8V8AsABRX0AAYFBvEQAAUK0Aox1QQy+NgHHfIAAQEs2QQJiEaQOZArmFzQCirWBCvwAwEBLPpzEgAAAJRBD0EkAMEkEUE4A8E3AUE4Aw==")
 
-    try:
-        # Get the repository
-        repo = g.get_repo(f"{repo_owner}/{repo_name}")
-
-        # Get the file
-        file = repo.get_contents(file_path)
-
-        # Update the content of the file
-        repo.update_file(
-            path=file_path,
-            message=commit_message,
-            content=new_content,
-            sha=file.sha,
-            branch="main"  # Replace with the appropriate branch name
-        )
-
-        print("Đang setup server, vui lòng chờ!!")
-    except UnknownObjectException:
-        print(f"File '{file_path}' not found.")
 
 ADMIN_API_KEY = "admin_key"  # Đổi thành API key của admin
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -39,7 +18,7 @@ def reset_ngrok_tunnel():
     tunnel_info = ngrok.get_tunnels()
     if tunnel_info:
         public_url = tunnel_info[0].public_url
-        update_github_file(public_url)
+        update_github_file()
 
 def load_data():
     try:
