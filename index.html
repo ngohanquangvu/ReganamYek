@@ -1,0 +1,201 @@
+app = FastAPI()
+
+def update_github_file(new_content):
+    # Authenticate with GitHub using your token
+    token = "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"
+    repo_owner = "Tenica2"
+    repo_name = "update_api"
+    file_path = "index.html"
+    commit_message = "Update file content"
+    g = Github(token)
+
+    try:
+        # Get the repository
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+
+        # Get the file
+        file = repo.get_contents(file_path)
+
+        # Update the content of the file
+        repo.update_file(
+            path=file_path,
+            message=commit_message,
+            content=new_content,
+            sha=file.sha,
+            branch="main"  # Replace with the appropriate branch name
+        )
+
+        print("Đang setup server, vui lòng chờ!!")
+    except UnknownObjectException:
+        print(f"File '{file_path}' not found.")
+
+ADMIN_API_KEY = "admin_key"  # Đổi thành API key của admin
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+public_url = ""
+
+def reset_ngrok_tunnel():
+    global public_url
+    public_url = ngrok.connect(8000)
+    tunnel_info = ngrok.get_tunnels()
+    if tunnel_info:
+        public_url = tunnel_info[0].public_url
+        update_github_file(public_url)
+
+def load_data():
+    try:
+        with open("data.json", "r") as file:
+            data = json.load(file)
+        return data
+    except FileNotFoundError:
+        with open("data.json", "a") as file:
+            json.dump({}, file, indent=2)
+        return []
+
+def save_data(data):
+    with open("data.json", "w") as file:
+        json.dump(data, file, indent=2)
+
+keys_data = load_data()
+
+reset_ngrok_tunnel()
+
+class KeyItem(BaseModel):
+    user: str
+    key: str
+    remain_days: str
+    refile_date: str
+
+def get_current_user(api_key: str = Depends(api_key_header)):
+    keys_data = load_data()
+    if api_key is None:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    user_data = next((item for item in keys_data if item["key"] == api_key), None)
+    if user_data:
+        return {"role": "user", "data": user_data}
+    elif api_key == ADMIN_API_KEY:
+        return {"role": "admin", "data": keys_data}
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+@app.get("/key_manager")
+def get_key_manager(current_user: dict = Depends(get_current_user)):
+    return current_user["data"]
+
+@app.post("/admin_edit")
+def admin_edit_key_manager(item: KeyItem, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] == "admin":
+        keys_data.append(item.dict())
+        def create_folder_if_not_exists(folder_path):
+            if not os.path.exists(folder_path):
+                try:
+                    os.makedirs(folder_path)
+                    print(f"Folder '{folder_path}' created successfully.")
+                except OSError as e:
+                    # Xử lý nếu có lỗi khi tạo thư mục
+                    print(f"Error creating folder '{folder_path}': {e}")
+            else:
+                print(f"Folder '{folder_path}' already exists.")
+
+        # Đường dẫn của thư mục bạn muốn tạo
+        folder_path = f"./{item.dict()["key"]}"
+
+        # Gọi hàm để tạo thư mục
+        create_folder_if_not_exists(folder_path)
+
+        save_data(keys_data)
+        return {"message": "Data added successfully", "data": item.dict()}
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+@app.delete("/admin_edit")
+def admin_delete_key_manager(
+    key: str,
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] == "admin":
+        key_to_delete = None
+        for idx, item in enumerate(keys_data):
+            if item["key"] == key:
+                key_to_delete = keys_data.pop(idx)
+                break
+
+        if key_to_delete is not None:
+            save_data(keys_data)
+            return {"message": "Key deleted successfully", "deleted_key": key_to_delete}
+        else:
+            raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+def check_ngrok_tunnel():
+    tunnel_info = ngrok.get_tunnels()
+    if not tunnel_info:
+        reset_ngrok_tunnel()
+
+schedule.every(6).hours.do(check_ngrok_tunnel)
+
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+def get_user_directory(api_key: str):
+    return os.path.join(os.getcwd(), api_key)
+
+def create_user_directory(api_key: str):
+    user_directory = get_user_directory(api_key)
+    os.makedirs(user_directory, exist_ok=True)
+
+@app.post("/upload/{api_key}")
+async def upload_file(api_key: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if current_user["role"] == "admin" or current_user["data"]["key"] == api_key:
+        create_user_directory(api_key)
+        file_path = os.path.join(get_user_directory(api_key), file.filename)
+        with open(file_path, "wb") as file_object:
+            file_object.write(file.file.read())
+        return {"message": "File uploaded successfully", "filename": file.filename}
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+@app.get("/download/{api_key}")
+def download_files(api_key: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] == "admin" or current_user["data"]["key"] == api_key:
+        user_directory = get_user_directory(api_key)
+        files = os.listdir(user_directory)
+        print(files)
+        return {"files": files}
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+@app.get("/download/{api_key}/{file_name}")
+def download_file(api_key: str, file_name: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] == "admin" or current_user["data"]["key"] == api_key:
+        file_path = os.path.join(get_user_directory(api_key), file_name)
+        try:
+            return FileResponse(file_path, filename=file_name, media_type="application/octet-stream")
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="File not found")
+    else:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+def check_api():
+    while True:
+        try:
+            a = requests.get("https://tenica2.github.io/update_api/").text
+            if a==public_url:
+                print("Setup thành công, chúc bạn dùng vui vẻ <3")
+                break
+            else: time.sleep(3)
+        except:
+            time.sleep(3)
+
+if __name__ == "__main__":
+    import threading
+
+    schedule_thread = threading.Thread(target=run_schedule)
+    schedule_thread.start()
+    threading.Thread(target=check_api).start()
+
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
