@@ -14,7 +14,6 @@ public_url = ""
 
 def reset_ngrok_tunnel():
     global public_url
-    ngrok.set_auth_token("21DF8zsUgtoUNenT2ZRI4Ga5WMt_4hy4pUWt4ktjh2BkJ2kZq")
     public_url = ngrok.connect(8000)
     tunnel_info = ngrok.get_tunnels()
     if tunnel_info:
@@ -28,7 +27,7 @@ def load_data():
         return data
     except FileNotFoundError:
         with open("data.json", "a") as file:
-            json.dump({}, file, indent=2)
+            json.dump([], file, indent=2)
         return []
 
 def save_data(data):
@@ -69,7 +68,7 @@ def get_key_manager(current_user: dict = Depends(get_current_user)):
 @app.post("/admin_edit")
 def admin_edit_key_manager(item: KeyItem, current_user: dict = Depends(get_current_user)):
     if current_user["role"] == "admin":
-        keys_data.append(item.dict())
+        keys_data.append(item.model_dump())
         def create_folder_if_not_exists(folder_path):
             if not os.path.exists(folder_path):
                 try:
@@ -82,7 +81,7 @@ def admin_edit_key_manager(item: KeyItem, current_user: dict = Depends(get_curre
                 print(f"Folder '{folder_path}' already exists.")
 
         # Đường dẫn của thư mục bạn muốn tạo
-        folder_path = f"./{item.dict()["key"]}"
+        folder_path = f"./{item.model_dump()["key"]}"
 
         # Gọi hàm để tạo thư mục
         create_folder_if_not_exists(folder_path)
