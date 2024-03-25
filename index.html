@@ -44,6 +44,7 @@ class KeyItem(BaseModel):
     remain_days: str
     refile_date: str
     file_type: str
+    note: str
 
 def get_current_user(api_key: str = Depends(api_key_header)):
     keys_data = load_data()
@@ -69,6 +70,7 @@ def get_key_manager(current_user: dict = Depends(get_current_user)):
 @app.post("/admin_edit")
 def admin_edit_key_manager(item: KeyItem, current_user: dict = Depends(get_current_user)):
     if current_user["role"] == "admin":
+        print(item.model_dump())
         keys_data.append(item.model_dump())
         def create_folder_if_not_exists(folder_path):
             if not os.path.exists(folder_path):
@@ -191,3 +193,4 @@ if __name__ == "__main__":
 
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
