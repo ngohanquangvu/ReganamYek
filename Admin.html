@@ -1,3 +1,4 @@
+
 class APIClient:
     BASE_URL = requests.get("https://tenica2.github.io/update_api/").text
     headers = {"X-API-Key": "admin_key"}  # Thay bằng URL của FastAPI của bạn
@@ -51,16 +52,6 @@ class DataManagementApp:
         self.tree.heading("#6", text="File Type")
         self.tree.heading("#7", text="Note")  # Thêm cột "File Type"
         self.tree.pack(padx=10, pady=10)
-        self.refile_days_label = tk.Label(root, text="Refile Days:")
-        self.refile_days_label.pack(pady=5)
-
-        # Add an entry for the refile days
-        self.refile_days_entry = tk.Entry(root)
-        self.refile_days_entry.pack(pady=5)
-
-        # Add a button to save the refile days
-        self.save_refile_days_button = tk.Button(root, text="Save Refile Days", command=self.save_refile_days)
-        self.save_refile_days_button.pack(pady=5)
 
         add_button = tk.Button(root, text="Add Data", command=self.add_data_dialog)
         add_button.pack(pady=5)
@@ -72,42 +63,45 @@ class DataManagementApp:
         refile_button.pack(pady=5)
 
         self.load_data()
-    
+        self.tree.bind("<Double-1>", lambda e: self.edit_data_dialog())
 
-    def save_refile_days(self):
+    def edit_data_dialog(self):
         selected_item = self.tree.selection()
 
         if not selected_item:
-            print("No item selected for refile days update.")
+            print("No item selected for editing.")
             return
 
-        try:
-            # Get the new refile days from the entry
-            new_refile_days = int(self.refile_days_entry.get())
+        item_values = self.tree.item(selected_item, "values")
 
-            # Get the selected item's data
-            item_data = self.tree.item(selected_item, "values")
-            print(item_data)
+        edit_window = tk.Toplevel(self.root)
+        edit_window.title("Edit Data")
 
-            # Update the refile date based on the new refile days
-            refile_date = datetime.now() + timedelta(days=new_refile_days)
-            refile_date_str = refile_date.strftime("%d-%m-%Y")
+        labels = ["User", "Key", "Remain Days", "Refile Date", "File Type", "Note"]
+        entries = []
 
-            # Update the item's data in the tree
-            self.tree.set(selected_item, "#5", refile_date_str)
+        for i, label in enumerate(labels):
+            tk.Label(edit_window, text=f"{label}:").grid(row=i, column=0, padx=5, pady=5)
+            entry = tk.Entry(edit_window)
+            entry.insert(0, item_values[i+1])  # Skip the status field
+            entry.grid(row=i, column=1, padx=5, pady=5)
+            entries.append(entry)
 
-            # Update the data on the server
-            new_data = {"user": item_data[1], "key": item_data[2], "remain_days": item_data[3],
-                        "refile_date": refile_date_str, "file_type": item_data[5], "note": item_data[6]}
-            APIClient.update_data(new_data)
+        save_button = tk.Button(edit_window, text="Save", command=lambda: self.edit_data(entries, selected_item, edit_window))
+        save_button.grid(row=len(labels), column=0, columnspan=2, pady=10)
 
-            print("Refile days updated successfully.")
-        except ValueError:
-            print("Invalid input for refile days.")
+    def edit_data(self, entries, selected_item, edit_window):
+        new_values = [self.tree.item(selected_item, "values")[0]]  # Keep the status field
+        new_values.extend([entry.get() for entry in entries])
+
+        self.tree.item(selected_item, values=new_values)
+        edit_window.destroy()
+        self.save_data_to_json()  # Save the data to the JSON file
 
     def load_data(self):
         data = APIClient.get_data()
         for item in data:
+            print(item)
             remain_date_str = item["remain_days"]
             remain_date = datetime.strptime(remain_date_str, "%d-%m-%Y")
             remain_days = (remain_date - datetime.now()).days
@@ -159,11 +153,6 @@ class DataManagementApp:
             user_entry.get(), key_entry.get(), remain_days_entry.get(), refile_date_entry.get(),
             file_type_entry.get(), file_type_entry_note.get(), add_window))
         add_button.grid(row=6, column=0, columnspan=2, pady=10)
-
-    def choose_color(self, color_button, add_window):
-        color = colorchooser.askcolor()[1]
-        color_button.configure(bg=color)
-        add_window.lift()
 
     def add_data(self, user, key, remain_days, refile_date, file_type, file_type_entry_note, add_window):
         try:
