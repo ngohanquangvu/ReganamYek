@@ -17,20 +17,50 @@ class APIClient:
     def delete_data(cls, key):
         response = requests.delete(f"{cls.BASE_URL}/admin_edit?key={key}", headers=cls.headers)
         return response.json()
+    
+    @staticmethod
+    def update_data(new_data):
+        # Read the data from the JSON file
+        with open('data.json', 'r') as f:
+            data = json.load(f)
+
+        # Find the data to update
+        for item in data:
+            if item['user'] == new_data['user'] and item['key'] == new_data['key']:
+                # Update the data
+                item.update(new_data)
+                break
+        else:
+            print("No matching data found to update.")
+
+        # Write the updated data back to the JSON file
+        with open('data.json', 'w') as f:
+            json.dump(data, f, indent=4)
 
 class DataManagementApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Data Management App")
 
-        self.tree = ttk.Treeview(root, columns=("Status", "User", "Key", "Remain Days", "Refile Date", "File Type"))
+        self.tree = ttk.Treeview(root, columns=("Status", "User", "Key", "Remain Days", "Refile Date", "File Type", "Note"))
         self.tree.heading("#1", text="Status")
         self.tree.heading("#2", text="User")
         self.tree.heading("#3", text="Key")
         self.tree.heading("#4", text="Remain Days")
         self.tree.heading("#5", text="Refile Date")
-        self.tree.heading("#6", text="File Type")  # Thêm cột "File Type"
+        self.tree.heading("#6", text="File Type")
+        self.tree.heading("#7", text="Note")  # Thêm cột "File Type"
         self.tree.pack(padx=10, pady=10)
+        self.refile_days_label = tk.Label(root, text="Refile Days:")
+        self.refile_days_label.pack(pady=5)
+
+        # Add an entry for the refile days
+        self.refile_days_entry = tk.Entry(root)
+        self.refile_days_entry.pack(pady=5)
+
+        # Add a button to save the refile days
+        self.save_refile_days_button = tk.Button(root, text="Save Refile Days", command=self.save_refile_days)
+        self.save_refile_days_button.pack(pady=5)
 
         add_button = tk.Button(root, text="Add Data", command=self.add_data_dialog)
         add_button.pack(pady=5)
@@ -42,6 +72,38 @@ class DataManagementApp:
         refile_button.pack(pady=5)
 
         self.load_data()
+    
+
+    def save_refile_days(self):
+        selected_item = self.tree.selection()
+
+        if not selected_item:
+            print("No item selected for refile days update.")
+            return
+
+        try:
+            # Get the new refile days from the entry
+            new_refile_days = int(self.refile_days_entry.get())
+
+            # Get the selected item's data
+            item_data = self.tree.item(selected_item, "values")
+            print(item_data)
+
+            # Update the refile date based on the new refile days
+            refile_date = datetime.now() + timedelta(days=new_refile_days)
+            refile_date_str = refile_date.strftime("%d-%m-%Y")
+
+            # Update the item's data in the tree
+            self.tree.set(selected_item, "#5", refile_date_str)
+
+            # Update the data on the server
+            new_data = {"user": item_data[1], "key": item_data[2], "remain_days": item_data[3],
+                        "refile_date": refile_date_str, "file_type": item_data[5], "note": item_data[6]}
+            APIClient.update_data(new_data)
+
+            print("Refile days updated successfully.")
+        except ValueError:
+            print("Invalid input for refile days.")
 
     def load_data(self):
         data = APIClient.get_data()
@@ -55,7 +117,7 @@ class DataManagementApp:
 
             file_type = item.get("file_type", "")  # Lấy loại file từ dữ liệu (nếu có)
 
-            self.tree.insert("", "end", values=(status, item["user"], item["key"], remain_date_str, item["refile_date"], file_type),
+            self.tree.insert("", "end", values=(status, item["user"], item["key"], remain_date_str, item["refile_date"], file_type, item["note"]),
                              tags=(status,))
             self.tree.tag_configure(status, foreground=status_color)
 
@@ -89,13 +151,13 @@ class DataManagementApp:
         file_type_entry = tk.Entry(add_window)
         file_type_entry.grid(row=4, column=1, padx=5, pady=5)
 
-        file_type_color_label = tk.Label(add_window, text="File Type Color:")
+        file_type_color_label = tk.Label(add_window, text="Note:")
         file_type_color_label.grid(row=5, column=0, padx=5, pady=5)
-        file_type_color_button = tk.Button(add_window, text="Choose Color", command=lambda: self.choose_color(file_type_color_button, add_window))
-
+        file_type_entry_note = tk.Entry(add_window)
+        file_type_entry_note.grid(row=5, column=1, padx=5, pady=5)
         add_button = tk.Button(add_window, text="Add", command=lambda: self.add_data(
             user_entry.get(), key_entry.get(), remain_days_entry.get(), refile_date_entry.get(),
-            file_type_entry.get(), file_type_color_button, add_window))
+            file_type_entry.get(), file_type_entry_note.get(), add_window))
         add_button.grid(row=6, column=0, columnspan=2, pady=10)
 
     def choose_color(self, color_button, add_window):
@@ -103,7 +165,7 @@ class DataManagementApp:
         color_button.configure(bg=color)
         add_window.lift()
 
-    def add_data(self, user, key, remain_days, refile_date, file_type, file_type_color_button, add_window):
+    def add_data(self, user, key, remain_days, refile_date, file_type, file_type_entry_note, add_window):
         try:
             remain_days = int(remain_days)
             refile_days = int(refile_date)
@@ -116,7 +178,7 @@ class DataManagementApp:
 
             new_data = {"user": user, "key": key, "remain_days": str(remain_date_str),
                         "refile_date": str(refile_date_str), "file_type": file_type,
-                        "file_color": file_type_color_button.cget("bg")}
+                        "note": str(file_type_entry_note)}
 
             response = APIClient.add_data(new_data)
 
@@ -124,13 +186,9 @@ class DataManagementApp:
                 status = "Expired" if remain_days < 0 else "Working"
                 status_color = "red" if remain_days < 0 else "green"
 
-                self.tree.insert("", "end", values=(status, user, key, remain_date_str, refile_date_str, file_type),
+                self.tree.insert("", "end", values=(status, user, key, remain_date_str, refile_date_str, file_type, file_type_entry_note),
                                  tags=(status,))
                 self.tree.tag_configure(status, foreground=status_color)
-
-                if file_type:
-                    file_type_color = file_type_color_button.cget("bg")
-                    self.tree.tag_configure(file_type, background=file_type_color)
 
                 add_window.destroy()
                 self.save_data_to_json()  # Lưu dữ liệu vào file JSON
@@ -144,7 +202,6 @@ class DataManagementApp:
         data = []
         for item in self.tree.get_children():
             values = self.tree.item(item, "values")
-            tags = self.tree.item(item, "tags")
             data.append({
                 "status": values[0],
                 "user": values[1],
@@ -152,7 +209,7 @@ class DataManagementApp:
                 "remain_days": values[3],
                 "refile_date": values[4],
                 "file_type": values[5],
-                "file_color": self.tree.tag_cget(values[5], "background") if values[5] else "",
+                "note":values[6],
             })
 
         with open("data.json", "w") as json_file:
