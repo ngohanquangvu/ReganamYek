@@ -14,6 +14,7 @@ public_url = ""
 
 def reset_ngrok_tunnel():
     global public_url
+    ngrok.set_auth_token("21DF8zsUgtoUNenT2ZRI4Ga5WMt_4hy4pUWt4ktjh2BkJ2kZq")
     public_url = ngrok.connect(8000)
     tunnel_info = ngrok.get_tunnels()
     if tunnel_info:
@@ -193,4 +194,3 @@ if __name__ == "__main__":
 
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
